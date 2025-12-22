@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Church Mini App</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --tg-theme-bg-color: var(--tg-theme-bg-color, #ffffff);
+            --tg-theme-text-color: var(--tg-theme-text-color, #000000);
+            --tg-theme-hint-color: var(--tg-theme-hint-color, #999999);
+            --tg-theme-link-color: var(--tg-theme-link-color, #2481cc);
+            --tg-theme-button-color: var(--tg-theme-button-color, #2481cc);
+            --tg-theme-button-text-color: var(--tg-theme-button-text-color, #ffffff);
+            --tg-theme-secondary-bg-color: var(--tg-theme-secondary-bg-color, #efeff4);
+            --tg-theme-header-bg-color: var(--tg-theme-header-bg-color, #ffffff);
+        }
+        body {
+            color: var(--tg-theme-text-color);
+            background: var(--tg-theme-bg-color);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            transition: all 0.3s ease;
+            margin: 0;
+            padding: 16px;
+        }
+        .card {
+            background: var(--tg-theme-secondary-bg-color);
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            transition: transform 0.2s;
+        }
+        .card:active {
+            transform: scale(0.98);
+        }
+        .btn-primary {
+            background: var(--tg-theme-button-color);
+            color: var(--tg-theme-button-text-color);
+            border-radius: 12px;
+            padding: 12px 20px;
+            font-weight: 600;
+            transition: opacity 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .btn-primary:active {
+            opacity: 0.8;
+        }
+        .input-field {
+            background: var(--tg-theme-bg-color);
+            color: var(--tg-theme-text-color);
+            border: 1px solid var(--tg-theme-hint-color);
+            border-radius: 12px;
+            padding: 12px 16px;
+            width: 100%;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .input-field:focus {
+            border-color: var(--tg-theme-link-color);
+        }
+        .tab-btn {
+            border-bottom: 3px solid transparent;
+            transition: all 0.2s;
+            color: var(--tg-theme-hint-color);
+            padding-bottom: 8px;
+        }
+        .tab-btn.active {
+            border-bottom: 3px solid var(--tg-theme-link-color);
+            color: var(--tg-theme-link-color);
+            font-weight: 600;
+        }
+        .detail-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(0,0,0,0.05);
+        }
+        .detail-label {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--tg-theme-hint-color);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .detail-value {
+            font-size: 1rem;
+            color: var(--tg-theme-text-color);
+        }
+        #search-results {
+            background: var(--tg-theme-bg-color);
+            color: var(--tg-theme-text-color);
+            border: 1px solid var(--tg-theme-secondary-bg-color);
+        }
+    </style>
+</head>
+<body class="p-4">
+    <div id="app">
+        <header class="flex justify-between items-center mb-4">
+            <h1 class="text-xl font-bold">Church Database</h1>
+            <div class="flex gap-2">
+                <button onclick="showSearch()" class="p-2"><i class="fas fa-search"></i></button>
+                <button onclick="viewMode('add')" class="p-2"><i class="fas fa-plus"></i></button>
+            </div>
+        </header>
+
+        <div id="search-container" class="mb-4 hidden">
+            <input type="text" id="search-input" class="input-field" placeholder="Поиск по имени или фамилии..." oninput="handleSearch(this.value)">
+            <div id="search-results" class="mt-2 max-h-60 overflow-y-auto shadow-lg rounded-lg bg-white hidden absolute z-10 w-[calc(100%-2rem)]"></div>
+        </div>
+
+        <nav class="flex justify-around mb-6 text-sm font-medium border-b border-gray-200">
+            <button onclick="setTab('people')" id="tab-people" class="tab-btn active pb-2 px-2">Люди</button>
+            <button onclick="setTab('homerooms')" id="tab-homerooms" class="tab-btn pb-2 px-2">Домашки</button>
+            <button onclick="setTab('birthdays')" id="tab-birthdays" class="tab-btn pb-2 px-2">ДР</button>
+            <button onclick="setTab('ai')" id="tab-ai" class="tab-btn pb-2 px-2">AI Ассистент</button>
+        </nav>
+
+        <div id="content-loading" class="text-center py-10 hidden">
+            <i class="fas fa-spinner fa-spin text-3xl"></i>
+        </div>
+
+        <div id="view-people" class="view">
+            <div id="people-list"></div>
+        </div>
+
+        <div id="view-homerooms" class="view hidden">
+            <div id="homerooms-list"></div>
+        </div>
+
+        <div id="view-birthdays" class="view hidden">
+            <div id="birthdays-list"></div>
+        </div>
+
+        <div id="view-ai" class="view hidden">
+            <div class="card">
+                <h3 class="font-bold mb-2">Задайте вопрос о базе данных</h3>
+                <textarea id="ai-question" class="input-field mb-2" rows="3" placeholder="Например: Кто родился в мае?"></textarea>
+                <button onclick="askAI()" class="btn-primary w-full">Спросить AI</button>
+                <div id="ai-answer" class="mt-4 text-sm whitespace-pre-wrap"></div>
+            </div>
+        </div>
+
+        <div id="view-details" class="view hidden">
+            <h2 class="text-lg font-bold mb-4">Просмотр карточки</h2>
+            <div id="details-content" class="space-y-3"></div>
+            <div class="flex gap-2 mt-6">
+                <button onclick="editCurrentPerson()" class="btn-primary flex-1">Редактировать</button>
+                <button onclick="viewMode('main')" class="bg-gray-500 text-white rounded-lg px-4 py-2 flex-1">Назад</button>
+            </div>
+        </div>
+
+        <div id="view-edit" class="view hidden">
+            <h2 id="edit-title" class="text-lg font-bold mb-4">Редактирование</h2>
+            <div id="edit-form" class="space-y-4"></div>
+            <div class="flex gap-2 mt-6">
+                <button onclick="savePerson()" class="btn-primary flex-1">Сохранить</button>
+                <button onclick="cancelEdit()" class="bg-gray-500 text-white rounded-lg px-4 py-2 flex-1">Отмена</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+
+        let currentTab = 'people';
+        let allPeople = [];
+        let headers = [];
+        let config = {};
+        let editingRow = null;
+        let currentPerson = null;
+
+        async function init() {
+            showLoading(true);
+            try {
+                const [hRes, cRes] = await Promise.all([
+                    fetch('/api/miniapp/headers'),
+                    fetch('/api/miniapp/config')
+                ]);
+                headers = await hRes.json();
+                config = await cRes.json();
+                await loadPeople();
+            } catch (e) {
+                console.error(e);
+            }
+            showLoading(false);
+        }
+
+        async function loadPeople() {
+            const res = await fetch('/api/miniapp/people');
+            allPeople = await res.json();
+            renderPeople();
+        }
+
+        function renderPeople() {
+            const container = document.getElementById('people-list');
+            container.innerHTML = allPeople.map(p => `
+                <div class="card flex justify-between items-center" onclick="viewPerson(${p.row_index})">
+                    <div>
+                        <div class="font-bold text-lg">${p['Имя'] || ''} ${p['Фамилия'] || ''}</div>
+                        <div class="text-sm opacity-70 flex items-center gap-2 mt-1">
+                            <i class="fas fa-home text-blue-400"></i> ${p['Домашка'] || 'Нет домашки'}
+                        </div>
+                        <div class="text-xs opacity-50 mt-1">
+                            <span class="px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100">${p['Статус'] || 'Без статуса'}</span>
+                        </div>
+                    </div>
+                    <i class="fas fa-chevron-right opacity-30"></i>
+                </div>
+            `).join('');
+        }
+
+        function showSearch() {
+            const container = document.getElementById('search-container');
+            container.classList.toggle('hidden');
+            if (!container.classList.contains('hidden')) {
+                document.getElementById('search-input').focus();
+            }
+        }
+
+        function handleSearch(query) {
+            const resultsContainer = document.getElementById('search-results');
+            if (!query || query.length < 2) {
+                resultsContainer.classList.add('hidden');
+                return;
+            }
+
+            const filtered = allPeople.filter(p => {
+                const fullName = `${p['Имя'] || ''} ${p['Фамилия'] || ''}`.toLowerCase();
+                return fullName.includes(query.toLowerCase());
+            }).slice(0, 10);
+
+            if (filtered.length > 0) {
+                resultsContainer.innerHTML = filtered.map(p => `
+                    <div class="p-3 border-b hover:bg-gray-100 cursor-pointer text-sm" onclick="viewPerson(${p.row_index}); hideSearch();">
+                        <div class="font-bold text-gray-800">${p['Имя'] || ''} ${p['Фамилия'] || ''}</div>
+                        <div class="text-xs text-gray-500">${p['Домашка'] || ''}</div>
+                    </div>
+                `).join('');
+                resultsContainer.classList.remove('hidden');
+            } else {
+                resultsContainer.innerHTML = '<div class="p-3 text-sm text-gray-500">Ничего не найдено</div>';
+                resultsContainer.classList.remove('hidden');
+            }
+        }
+
+        function hideSearch() {
+            document.getElementById('search-container').classList.add('hidden');
+            document.getElementById('search-results').classList.add('hidden');
+            document.getElementById('search-input').value = '';
+        }
+
+        async function loadHomerooms() {
+            showLoading(true);
+            const res = await fetch('/api/miniapp/homerooms');
+            const data = await res.json();
+            const container = document.getElementById('homerooms-list');
+            container.innerHTML = Object.entries(data).map(([name, people]) => `
+                <div class="mb-4">
+                    <h3 class="font-bold border-b pb-1 mb-2">${name} (${people.length})</h3>
+                    <div class="space-y-1">
+                        ${people.map(p => `<div class="text-sm">${p.name} <span class="text-xs text-gray-500">${p.age_str}</span></div>`).join('')}
+                    </div>
+                </div>
+            `).join('');
+            showLoading(false);
+        }
+
+        async function loadBirthdays() {
+            showLoading(true);
+            const res = await fetch('/api/miniapp/birthdays');
+            const data = await res.json();
+            const months = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
+            const container = document.getElementById('birthdays-list');
+            container.innerHTML = months.map((m, i) => {
+                const people = data[i+1] || [];
+                if (people.length === 0) return '';
+                return `
+                    <div class="mb-4">
+                        <h3 class="font-bold text-blue-500 border-b pb-1 mb-2">${m}</h3>
+                        <div class="space-y-1">
+                            ${people.map(p => `<div class="text-sm">${p.day}. ${p.name} <span class="text-xs text-gray-500">(${p.year})</span></div>`).join('')}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            showLoading(false);
+        }
+
+        function setTab(tab) {
+            currentTab = tab;
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(`tab-${tab}`).classList.add('active');
+            
+            document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
+            document.getElementById(`view-${tab}`).classList.remove('hidden');
+
+            if (tab === 'people') renderPeople();
+            if (tab === 'homerooms') loadHomerooms();
+            if (tab === 'birthdays') loadBirthdays();
+        }
+
+        function viewMode(mode) {
+            document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
+            if (mode === 'main') {
+                document.getElementById(`view-${currentTab}`).classList.remove('hidden');
+            } else if (mode === 'add') {
+                editingRow = null;
+                showEditForm({});
+            }
+        }
+
+        function viewPerson(rowIndex) {
+            currentPerson = allPeople.find(p => p.row_index === rowIndex);
+            document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
+            const container = document.getElementById('view-details');
+            container.classList.remove('hidden');
+            
+            const content = document.getElementById('details-content');
+            content.innerHTML = `
+                <div class="flex flex-col items-center mb-6">
+                    <div class="w-20 h-20 bg-blue-500 rounded-full flex items-center justify-center text-white text-3xl font-bold mb-2">
+                        ${(currentPerson['Имя'] || '?').charAt(0)}${(currentPerson['Фамилия'] || '').charAt(0)}
+                    </div>
+                    <h2 class="text-xl font-bold">${currentPerson['Имя'] || ''} ${currentPerson['Фамилия'] || ''}</h2>
+                </div>
+                <div class="card space-y-1">
+                    ${headers.map(h => {
+                        const val = currentPerson[h];
+                        if (!val || val.toString().trim() === '' || h === 'Имя' || h === 'Фамилия') return '';
+                        return `
+                            <div class="detail-item">
+                                <div class="detail-label">${h}</div>
+                                <div class="detail-value">${val}</div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `;
+        }
+
+        function editCurrentPerson() {
+            editingRow = currentPerson.row_index;
+            showEditForm(currentPerson);
+        }
+
+        function cancelEdit() {
+            if (editingRow) {
+                viewPerson(editingRow);
+            } else {
+                viewMode('main');
+            }
+        }
+
+        function showEditForm(person) {
+            document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
+            document.getElementById('view-edit').classList.remove('hidden');
+            document.getElementById('edit-title').innerText = editingRow ? 'Редактирование' : 'Новая карточка';
+            
+            const form = document.getElementById('edit-form');
+            form.innerHTML = headers.map(h => {
+                const val = person[h] || '';
+                let input = `<input type="text" id="field-${h}" class="input-field" placeholder="Введите ${h.toLowerCase()}..." value="${val}">`;
+                
+                if (config.date_columns.includes(h)) {
+                    input = `<input type="date" id="field-${h}" class="input-field" value="${formatDateForInput(val)}">`;
+                } else if (h === 'Домашка') {
+                    input = `<select id="field-${h}" class="input-field">
+                        <option value="">Не выбрано</option>
+                        ${config.homeroom_values.map(v => `<option value="${v}" ${val === v ? 'selected' : ''}>${v}</option>`).join('')}
+                    </select>`;
+                } else if (h === 'Статус') {
+                    input = `<select id="field-${h}" class="input-field">
+                        <option value="">Не выбрано</option>
+                        ${config.status_values.map(v => `<option value="${v}" ${val === v ? 'selected' : ''}>${v}</option>`).join('')}
+                    </select>`;
+                }
+                
+                return `<div>
+                    <label class="block text-xs font-bold text-gray-500 mb-1">${h}</label>
+                    ${input}
+                </div>`;
+            }).join('');
+        }
+
+        function formatDateForInput(val) {
+            if (!val) return '';
+            // If already YYYY-MM-DD
+            if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
+            // If DD.MM.YYYY
+            const parts = val.split('.');
+            if (parts.length === 3) {
+                return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+            }
+            return '';
+        }
+
+        async function savePerson() {
+            const data = headers.map(h => {
+                const el = document.getElementById(`field-${h}`);
+                if (!el) return '';
+                let val = el.value;
+                if (config.date_columns.includes(h) && val) {
+                    const parts = val.split('-');
+                    if (parts.length === 3) {
+                        val = `${parts[2]}.${parts[1]}.${parts[0]}`;
+                    }
+                }
+                return val;
+            });
+            showLoading(true);
+            try {
+                const url = editingRow ? `/api/miniapp/person/${editingRow}` : '/api/miniapp/person';
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ data })
+                });
+                if (res.ok) {
+                    tg.HapticFeedback.notificationOccurred('success');
+                    tg.showAlert('Запись успешно сохранена!');
+                    await loadPeople();
+                    if (editingRow) {
+                        viewPerson(editingRow);
+                    } else {
+                        viewMode('main');
+                    }
+                } else {
+                    tg.showAlert('Ошибка при сохранении');
+                }
+            } catch (e) {
+                console.error(e);
+                tg.showAlert('Сетевая ошибка при сохранении');
+            }
+            showLoading(false);
+        }
+
+        async function askAI() {
+            const question = document.getElementById('ai-question').value;
+            if (!question) return;
+            
+            const answerDiv = document.getElementById('ai-answer');
+            answerDiv.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Думаю...';
+            
+            const res = await fetch('/api/miniapp/ask', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question })
+            });
+            const data = await res.json();
+            answerDiv.innerText = data.answer;
+        }
+
+        function showLoading(show) {
+            document.getElementById('content-loading').classList.toggle('hidden', !show);
+        }
+
+        init();
+    </script>
+</body>
+</html>

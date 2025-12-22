@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  bot:
+    build: .
+    restart: always
+    # Убираем ports, так как для polling они не нужны (бот сам стучится в Telegram)
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./google_creds.json:/app/google_creds.json
+    # Используем переменные из файла .env, чтобы не светить их здесь
+    env_file:
+      - .env
+    environment:
+      - GOOGLE_CREDENTIALS_FILE=/app/google_creds.json
+      # Остальные переменные подтянутся автоматически из .env
