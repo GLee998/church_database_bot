@@ -167,3 +167,6 @@ urllib3==2.2.3
     #   requests
 uvicorn==0.34.0
     # via -r requirements.in
+python-multipart==0.0.20
+Pillow==11.0.0
+pillow-heif==0.21.0

@@ -112,7 +112,7 @@ class GoogleSheetsClient:
             logger.info("🔄 Refreshing cache for ALL worksheets...")
             
             # Список листов для обновления
-            worksheets_to_sync = ["MainSheet", "Users", "AccessLog"]
+            worksheets_to_sync = ["MainSheet", "Users", "AccessLog", "ActionLog"]
             total_rows = 0
             
             for sheet_name in worksheets_to_sync:
@@ -166,6 +166,14 @@ class GoogleSheetsClient:
     async def append_row(self, data: List[Any], worksheet_title: str = None) -> int:
         """Добавление строки"""
         cache_key = worksheet_title if worksheet_title else "MainSheet"
+        
+        # Препроцессинг данных: форматирование дат
+        if cache_key == "MainSheet":
+            headers = await self.get_headers()
+            for i, val in enumerate(data):
+                if i < len(headers) and headers[i] in settings.date_columns and val:
+                    data[i] = formatter.format_date(val)
+                    
         worksheet = await self.get_worksheet(worksheet_title)
         loop = asyncio.get_event_loop()
         
@@ -187,6 +195,14 @@ class GoogleSheetsClient:
     async def update_row(self, row_number: int, data: List[Any], worksheet_title: str = None):
         """Обновление строки"""
         cache_key = worksheet_title if worksheet_title else "MainSheet"
+        
+        # Препроцессинг данных: форматирование дат
+        if cache_key == "MainSheet":
+            headers = await self.get_headers()
+            for i, val in enumerate(data):
+                if i < len(headers) and headers[i] in settings.date_columns and val:
+                    data[i] = formatter.format_date(val)
+
         worksheet = await self.get_worksheet(worksheet_title)
         loop = asyncio.get_event_loop()
         
@@ -219,13 +235,51 @@ class GoogleSheetsClient:
         
         # Добавляем колонку
         col_index = len(headers) + 1
-        cell = worksheet.cell(1, col_index)
-        cell.value = column_name
         
-        await loop.run_in_executor(None, worksheet.update_cells, [cell])
+        def _update_cell():
+            cell = worksheet.cell(1, col_index)
+            cell.value = column_name
+            worksheet.update_cells([cell])
+            
+        await loop.run_in_executor(None, _update_cell)
         
         # Сбрасываем кэш
         await self.refresh_cache(worksheet_title)
+        
+        return True
+
+    async def delete_column(self, column_name: str, worksheet_title: str = None) -> bool:
+        """Удаление колонки по названию"""
+        headers = await self.get_headers(worksheet_title)
+        if column_name not in headers:
+            return False
+        
+        col_index = headers.index(column_name) + 1
+        worksheet = await self.get_worksheet(worksheet_title)
+        loop = asyncio.get_event_loop()
+        
+        await loop.run_in_executor(None, lambda: worksheet.delete_columns(col_index))
+        
+        # Сбрасываем кэш
+        await self.refresh_cache(worksheet_title)
+        return True
+
+    async def delete_row(self, row_number: int, worksheet_title: str = None) -> bool:
+        """Удаление строки по номеру"""
+        worksheet = await self.get_worksheet(worksheet_title)
+        loop = asyncio.get_event_loop()
+        
+        await loop.run_in_executor(None, lambda: worksheet.delete_rows(row_number))
+        
+        # Обновляем кэш
+        cache_key = worksheet_title if worksheet_title else "MainSheet"
+        async with self._cache_lock:
+            if cache_key in self._cache:
+                idx = row_number - 1
+                if 0 <= idx < len(self._cache[cache_key]):
+                    self._cache[cache_key].pop(idx)
+            else:
+                await self.refresh_cache(worksheet_title)
         
         return True
     

@@ -62,6 +62,7 @@ async def lifespan(app: FastAPI):
             telegram_app.add_handler(CommandHandler("start", bot.handle_start_command))
             telegram_app.add_handler(CommandHandler("menu", bot.handle_menu_command))
             telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, bot.handle_message))
+            telegram_app.add_handler(MessageHandler(filters.PHOTO, bot.handle_photo))
             telegram_app.add_handler(CallbackQueryHandler(bot.handle_callback))
             
             await telegram_app.initialize()
@@ -119,6 +120,7 @@ app.add_middleware(
 )
 
 # Статические файлы Mini App
+os.makedirs("static/photos", exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 app.mount("/photos", StaticFiles(directory="static/photos"), name="photos")
 

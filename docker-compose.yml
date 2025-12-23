@@ -9,6 +9,7 @@ services:
       - "8080:8080"
     volumes:
       - ./google_creds.json:/app/google_creds.json
+      - ./static/photos:/app/static/photos
     # Используем переменные из файла .env, чтобы не светить их здесь
     env_file:
       - .env

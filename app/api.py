@@ -1,6 +1,13 @@
 import os
 import uuid
+import io
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
+from PIL import Image
+try:
+    from pillow_heif import register_heif_opener
+    register_heif_opener()
+except ImportError:
+    pass
 from typing import List, Dict, Any, Optional
 from app.sheets import sheets_client
 from app.gemini import gemini
@@ -83,20 +90,43 @@ async def get_config():
 
 @router.post("/person/{row_index}/photo")
 async def upload_photo(row_index: int, file: UploadFile = File(...)):
-    import os
-    import uuid
     # Создаем директорию для фото если нет
     photo_dir = "static/photos"
     os.makedirs(photo_dir, exist_ok=True)
     
-    # Генерируем имя файла
-    ext = os.path.splitext(file.filename)[1]
-    filename = f"{uuid.uuid4()}{ext}"
+    # Генерируем имя файла (всегда сохраняем в jpg для совместимости и сжатия)
+    filename = f"{uuid.uuid4()}.jpg"
     filepath = os.path.join(photo_dir, filename)
     
-    # Сохраняем файл
-    with open(filepath, "wb") as buffer:
-        buffer.write(await file.read())
+    try:
+        # Читаем файл
+        content = await file.read()
+        if not content:
+            raise HTTPException(status_code=400, detail="Файл пуст")
+            
+        image = Image.open(io.BytesIO(content))
+        
+        # Конвертируем в RGB если нужно (для PNG с прозрачностью или других форматов)
+        if image.mode in ("RGBA", "P"):
+            image = image.convert("RGB")
+        elif image.mode != "RGB":
+            image = image.convert("RGB")
+
+        # Сжатие/ресайз
+        max_size = 800
+        if max(image.size) > max_size:
+            image.thumbnail((max_size, max_size), Image.LANCZOS)
+        
+        # Сохраняем с оптимизацией
+        try:
+            image.save(filepath, "JPEG", quality=85, optimize=True)
+        except Exception as save_error:
+            raise HTTPException(status_code=500, detail=f"Ошибка сохранения файла на сервере: {str(save_error)}")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Ошибка обработки изображения: {str(e)}")
     
     photo_url = f"/photos/{filename}"
     
@@ -121,4 +151,23 @@ async def upload_photo(row_index: int, file: UploadFile = File(...)):
     row_data[photo_col_idx] = photo_url
     await sheets_client.update_row(row_index, row_data)
     
+    # Refresh cache to ensure it's updated for other users
+    await sheets_client.refresh_main_cache()
+    
     return {"photo_url": photo_url}
+
+@router.delete("/person/{row_index}")
+async def delete_person(row_index: int):
+    try:
+        await sheets_client.delete_row(row_index)
+        return {"success": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/column/{column_name}")
+async def delete_column(column_name: str):
+    try:
+        success = await sheets_client.delete_column(column_name)
+        return {"success": success}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

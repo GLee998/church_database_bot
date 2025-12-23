@@ -22,16 +22,17 @@
             color: var(--tg-theme-text-color);
             background: var(--tg-theme-bg-color);
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            transition: all 0.3s ease;
+            transition: background-color 0.3s ease;
             margin: 0;
             padding: 16px;
         }
         .card {
             background: var(--tg-theme-secondary-bg-color);
+            color: var(--tg-theme-text-color);
             border-radius: 16px;
             padding: 16px;
             margin-bottom: 12px;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            border: 1px solid rgba(0,0,0,0.1);
             transition: transform 0.2s;
         }
         .card:active {
@@ -66,22 +67,24 @@
             border-color: var(--tg-theme-link-color);
         }
         .tab-btn {
-            border-bottom: 3px solid transparent;
-            transition: all 0.2s;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             color: var(--tg-theme-hint-color);
-            padding-bottom: 8px;
+            padding: 8px 12px;
+            border-radius: 12px;
+            font-size: 0.875rem;
+            font-weight: 500;
         }
         .tab-btn.active {
-            border-bottom: 3px solid var(--tg-theme-link-color);
-            color: var(--tg-theme-link-color);
-            font-weight: 600;
+            background: var(--tg-theme-button-color);
+            color: var(--tg-theme-button-text-color);
+            box-shadow: 0 4px 12px rgba(36, 129, 204, 0.3);
         }
         .detail-item {
             display: flex;
             flex-direction: column;
             gap: 4px;
             padding: 8px 0;
-            border-bottom: 1px solid rgba(0,0,0,0.05);
+            border-bottom: 1px solid rgba(255,255,255,0.05);
         }
         .detail-label {
             font-size: 0.75rem;
@@ -99,6 +102,11 @@
             color: var(--tg-theme-text-color);
             border: 1px solid var(--tg-theme-secondary-bg-color);
         }
+        /* Дополнительные стили для темной темы */
+        .text-hint { color: var(--tg-theme-hint-color); }
+        .bg-secondary { background: var(--tg-theme-secondary-bg-color); }
+        .bg-main { background: var(--tg-theme-bg-color); }
+        .border-theme { border-color: rgba(255,255,255,0.1); }
     </style>
 </head>
 <body class="p-4 pb-20">
@@ -111,16 +119,22 @@
             </div>
         </header>
 
-        <div id="search-container" class="mb-4 hidden">
-            <input type="text" id="search-input" class="input-field" placeholder="Поиск по имени или фамилии..." oninput="handleSearch(this.value)">
-            <div id="search-results" class="mt-2 max-h-60 overflow-y-auto shadow-lg rounded-lg bg-white hidden absolute z-10 w-[calc(100%-2rem)]"></div>
+        <div id="search-container" class="mb-4 hidden relative">
+            <div class="relative">
+                <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                <input type="text" id="search-input" class="input-field pl-11" placeholder="Поиск по имени, фамилии или домашке..." oninput="handleSearch(this.value)">
+                <button onclick="hideSearch()" class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div id="search-results" class="mt-2 max-h-60 overflow-y-auto shadow-xl rounded-2xl hidden absolute z-50 w-full left-0 right-0 border border-theme bg-main p-2 space-y-1"></div>
         </div>
 
-        <nav class="flex justify-around mb-6 text-sm font-medium border-b border-gray-200">
-            <button onclick="setTab('people')" id="tab-people" class="tab-btn active pb-2 px-2">Люди</button>
-            <button onclick="setTab('homerooms')" id="tab-homerooms" class="tab-btn pb-2 px-2">Домашки</button>
-            <button onclick="setTab('birthdays')" id="tab-birthdays" class="tab-btn pb-2 px-2">ДР</button>
-            <button onclick="setTab('ai')" id="tab-ai" class="tab-btn pb-2 px-2">AI Ассистент</button>
+        <nav class="flex justify-between p-1 bg-secondary rounded-2xl mb-8 border border-theme">
+            <button onclick="setTab('people')" id="tab-people" class="tab-btn active flex-1">Люди</button>
+            <button onclick="setTab('homerooms')" id="tab-homerooms" class="tab-btn flex-1">Домашки</button>
+            <button onclick="setTab('birthdays')" id="tab-birthdays" class="tab-btn flex-1">ДР</button>
+            <button onclick="setTab('ai')" id="tab-ai" class="tab-btn flex-1 text-xs">AI</button>
         </nav>
 
         <div id="content-loading" class="text-center py-10 hidden">
@@ -143,7 +157,9 @@
             <div class="card">
                 <h3 class="font-bold mb-2">Задайте вопрос о базе данных</h3>
                 <textarea id="ai-question" class="input-field mb-2" rows="3" placeholder="Например: Кто родился в мае?"></textarea>
-                <button onclick="askAI()" class="btn-primary w-full">Спросить AI</button>
+                <button onclick="askAI()" class="btn-primary w-full py-4 shadow-lg shadow-blue-500/20">
+                    <i class="fas fa-magic mr-2"></i> Спросить AI
+                </button>
                 <div id="ai-answer" class="mt-4 text-sm whitespace-pre-wrap"></div>
             </div>
         </div>
@@ -151,9 +167,13 @@
         <div id="view-details" class="view hidden">
             <h2 class="text-lg font-bold mb-4">Просмотр карточки</h2>
             <div id="details-content" class="space-y-3"></div>
-            <div class="flex gap-2 mt-6">
-                <button onclick="editCurrentPerson()" class="btn-primary flex-1">Редактировать</button>
-                <button onclick="viewMode('main')" class="bg-gray-500 text-white rounded-lg px-4 py-2 flex-1">Назад</button>
+            <div class="flex flex-col gap-2 mt-8">
+                <button onclick="editCurrentPerson()" class="btn-primary w-full py-4 rounded-2xl shadow-lg shadow-blue-500/20">
+                    <i class="fas fa-edit mr-2"></i> Редактировать
+                </button>
+                <button onclick="viewMode('main')" class="bg-secondary text-hint font-bold w-full py-4 rounded-2xl transition-colors">
+                    <i class="fas fa-arrow-left mr-2"></i> Назад к списку
+                </button>
             </div>
         </div>
 
@@ -161,8 +181,12 @@
             <h2 id="edit-title" class="text-lg font-bold mb-4">Редактирование</h2>
             <div id="edit-form" class="space-y-4"></div>
             <div class="flex gap-2 mt-6">
-                <button onclick="savePerson()" class="btn-primary flex-1">Сохранить</button>
-                <button onclick="cancelEdit()" class="bg-gray-500 text-white rounded-lg px-4 py-2 flex-1">Отмена</button>
+                <button onclick="savePerson()" class="btn-primary flex-1 py-4 shadow-lg shadow-blue-500/20">
+                    <i class="fas fa-check mr-2"></i> Сохранить
+                </button>
+                <button onclick="cancelEdit()" class="bg-secondary text-hint font-bold rounded-2xl px-4 py-4 flex-1 transition-colors">
+                    Отмена
+                </button>
             </div>
         </div>
     </div>
@@ -205,24 +229,26 @@
             container.innerHTML = allPeople.map(p => {
                 const photoUrl = p[config.col_photo];
                 const avatar = photoUrl
-                    ? `<img src="${photoUrl}" class="w-12 h-12 rounded-full object-cover mr-4 shadow-sm">`
-                    : `<div class="w-12 h-12 bg-blue-500 rounded-full flex items-center justify-center text-white text-sm font-bold mr-4 shadow-sm">
+                    ? `<img src="${photoUrl}" class="w-14 h-14 rounded-2xl object-cover mr-4 shadow-md border border-theme">`
+                    : `<div class="w-14 h-14 bg-gradient-to-br from-blue-400 to-blue-600 rounded-2xl flex items-center justify-center text-white text-lg font-bold mr-4 shadow-md border border-theme">
                         ${(p['Имя'] || '?').charAt(0)}${(p['Фамилия'] || '').charAt(0)}
                        </div>`;
                 
                 return `
-                <div class="card flex items-center" onclick="viewPerson(${p.row_index})">
+                <div class="card flex items-center p-4 hover:border-blue-200 transition-all active:scale-[0.97]" onclick="viewPerson(${p.row_index})">
                     ${avatar}
-                    <div class="flex-1">
-                        <div class="font-bold text-lg leading-tight">${p['Имя'] || ''} ${p['Фамилия'] || ''}</div>
-                        <div class="text-sm opacity-70 flex items-center gap-1 mt-1">
-                            <i class="fas fa-home text-blue-400 text-xs"></i> ${p['Домашка'] || 'Нет домашки'}
+                    <div class="flex-1 min-w-0">
+                        <div class="font-black text-lg leading-tight truncate">${p['Имя'] || ''} ${p['Фамилия'] || ''}</div>
+                        <div class="text-xs font-bold text-hint flex items-center gap-1 mt-1">
+                            <i class="fas fa-home text-[10px] text-blue-400"></i> <span class="truncate">${p['Домашка'] || 'Не распределен'}</span>
                         </div>
-                        <div class="text-xs opacity-60 mt-1">
-                            <span class="px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100">${p['Статус'] || 'Без статуса'}</span>
+                        <div class="flex gap-2 mt-2">
+                            <span class="px-2 py-0.5 rounded-lg bg-blue-500/10 text-blue-500 text-[10px] font-black uppercase tracking-wider">${p['Статус'] || 'Прихожанин'}</span>
                         </div>
                     </div>
-                    <i class="fas fa-chevron-right opacity-20"></i>
+                    <div class="ml-2 w-8 h-8 rounded-full bg-main/50 flex items-center justify-center text-hint">
+                        <i class="fas fa-chevron-right text-[10px]"></i>
+                    </div>
                 </div>
                 `;
             }).join('');
@@ -244,20 +270,32 @@
             }
 
             const filtered = allPeople.filter(p => {
-                const fullName = `${p['Имя'] || ''} ${p['Фамилия'] || ''}`.toLowerCase();
-                return fullName.includes(query.toLowerCase());
+                const firstName = (p['Имя'] || '').toLowerCase();
+                const lastName = (p['Фамилия'] || '').toLowerCase();
+                const homeroom = (p['Домашка'] || '').toLowerCase();
+                const q = query.toLowerCase();
+                
+                return firstName.includes(q) || lastName.includes(q) || homeroom.includes(q);
             }).slice(0, 10);
 
             if (filtered.length > 0) {
                 resultsContainer.innerHTML = filtered.map(p => `
-                    <div class="p-3 border-b hover:bg-gray-100 cursor-pointer text-sm" onclick="viewPerson(${p.row_index}); hideSearch();">
-                        <div class="font-bold text-gray-800">${p['Имя'] || ''} ${p['Фамилия'] || ''}</div>
-                        <div class="text-xs text-gray-500">${p['Домашка'] || ''}</div>
+                    <div class="flex items-center p-3 hover:bg-blue-50 rounded-xl cursor-pointer transition-colors group" onclick="viewPerson(${p.row_index}); hideSearch();">
+                        <div class="w-10 h-10 rounded-lg bg-blue-500/10 text-blue-500 flex items-center justify-center font-bold mr-3 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                            ${(p['Имя'] || '?').charAt(0)}
+                        </div>
+                        <div class="flex-1">
+                            <div class="font-bold text-sm">${p['Имя'] || ''} ${p['Фамилия'] || ''}</div>
+                            <div class="text-[10px] text-hint flex items-center gap-1">
+                                <i class="fas fa-home text-[8px]"></i> ${p['Домашка'] || 'Нет домашки'}
+                            </div>
+                        </div>
+                        <i class="fas fa-chevron-right text-[10px] text-hint"></i>
                     </div>
                 `).join('');
                 resultsContainer.classList.remove('hidden');
             } else {
-                resultsContainer.innerHTML = '<div class="p-3 text-sm text-gray-500">Ничего не найдено</div>';
+                resultsContainer.innerHTML = '<div class="p-4 text-center text-sm text-hint">Ничего не найдено</div>';
                 resultsContainer.classList.remove('hidden');
             }
         }
@@ -274,10 +312,21 @@
             const data = await res.json();
             const container = document.getElementById('homerooms-list');
             container.innerHTML = Object.entries(data).map(([name, people]) => `
-                <div class="mb-4">
-                    <h3 class="font-bold border-b pb-1 mb-2">${name} (${people.length})</h3>
-                    <div class="space-y-1">
-                        ${people.map(p => `<div class="text-sm">${p.name} <span class="text-xs text-gray-500">${p.age_str}</span></div>`).join('')}
+                <div class="card p-0 mb-4 overflow-hidden">
+                    <div class="bg-blue-500/10 px-4 py-2 border-b border-theme flex justify-between items-center">
+                        <h3 class="font-black text-blue-500 text-sm uppercase tracking-wider">${name}</h3>
+                        <span class="bg-[var(--tg-theme-button-color)] text-[var(--tg-theme-button-text-color)] text-[10px] px-2 py-0.5 rounded-full font-bold">${people.length}</span>
+                    </div>
+                    <div class="p-2 space-y-1">
+                        ${people.map(p => `
+                            <div class="flex items-center justify-between p-2 hover:bg-main/50 rounded-xl transition-colors cursor-pointer" onclick="viewPerson(${p.row_index})">
+                                <div class="text-sm font-semibold">${p.name}</div>
+                                <div class="flex gap-2 items-center">
+                                    <span class="text-[10px] font-bold text-hint bg-main px-2 py-0.5 rounded-md">${p.age_str}</span>
+                                    <i class="fas fa-chevron-right text-[10px] text-hint"></i>
+                                </div>
+                            </div>
+                        `).join('')}
                     </div>
                 </div>
             `).join('');
@@ -290,14 +339,34 @@
             const data = await res.json();
             const months = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
             const container = document.getElementById('birthdays-list');
+            const currentMonth = new Date().getMonth() + 1;
+
             container.innerHTML = months.map((m, i) => {
-                const people = data[i+1] || [];
+                const monthNum = i + 1;
+                const people = data[monthNum] || [];
                 if (people.length === 0) return '';
+                
+                const isCurrent = monthNum === currentMonth;
+                
                 return `
-                    <div class="mb-4">
-                        <h3 class="font-bold text-blue-500 border-b pb-1 mb-2">${m}</h3>
-                        <div class="space-y-1">
-                            ${people.map(p => `<div class="text-sm">${p.day}. ${p.name} <span class="text-xs text-gray-500">(${p.year})</span></div>`).join('')}
+                    <div class="card p-0 ${isCurrent ? 'ring-2 ring-blue-500 bg-blue-500/10' : ''} border border-theme mb-6 overflow-hidden">
+                        <div class="${isCurrent ? 'bg-blue-500 text-white' : 'bg-main text-hint'} px-4 py-3 border-b border-theme flex justify-between items-center">
+                            <h3 class="font-black text-sm uppercase tracking-widest">${m}</h3>
+                            ${isCurrent ? '<span class="text-[10px] font-black bg-main text-blue-500 px-2 py-0.5 rounded-full uppercase">Этот месяц</span>' : ''}
+                        </div>
+                        <div class="p-2">
+                            ${people.map(p => `
+                                <div class="flex items-center gap-4 p-3 hover:bg-main hover:shadow-sm rounded-2xl transition-all cursor-pointer" onclick="viewPerson(${p.row_index})">
+                                    <div class="w-10 h-10 rounded-xl ${isCurrent ? 'bg-blue-100 text-blue-600' : 'bg-secondary text-hint'} flex flex-col items-center justify-center flex-shrink-0">
+                                        <span class="text-xs font-black leading-none">${p.day}</span>
+                                    </div>
+                                    <div class="flex-1 min-w-0">
+                                        <div class="text-sm font-bold truncate">${p.name}</div>
+                                        <div class="text-[10px] text-hint font-bold">${p.year} г.р.</div>
+                                    </div>
+                                    <i class="fas fa-gift ${isCurrent ? 'text-pink-400' : 'text-hint/20'}"></i>
+                                </div>
+                            `).join('')}
                         </div>
                     </div>
                 `;
@@ -330,47 +399,89 @@
 
         function viewPerson(rowIndex) {
             currentPerson = allPeople.find(p => p.row_index === rowIndex);
+            if (!currentPerson) return;
+            
             document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
             const container = document.getElementById('view-details');
             container.classList.remove('hidden');
             
             const content = document.getElementById('details-content');
             const photoUrl = currentPerson[config.col_photo];
+            
+            // Generate initials
+            const initials = `${(currentPerson['Имя'] || '?').charAt(0)}${(currentPerson['Фамилия'] || '').charAt(0)}`.toUpperCase();
+            
             const avatar = photoUrl
-                ? `<div class="relative group">
-                    <img src="${photoUrl}" class="w-24 h-24 rounded-full object-cover mb-2 border-4 border-white shadow-lg">
-                    <button onclick="triggerPhotoUpload()" class="absolute bottom-2 right-0 bg-blue-500 text-white p-1.5 rounded-full shadow-md hover:bg-blue-600 transition-colors">
-                        <i class="fas fa-camera text-xs"></i>
+                ? `<div class="relative inline-block">
+                    <img src="${photoUrl}" class="w-32 h-32 rounded-3xl object-cover shadow-2xl border-2 border-theme">
+                    <button onclick="triggerPhotoUpload()" class="absolute -bottom-2 -right-2 bg-blue-500 text-white w-10 h-10 rounded-full shadow-xl border-4 border-main flex items-center justify-center hover:bg-blue-600 transition-all active:scale-90">
+                        <i class="fas fa-camera"></i>
                     </button>
                    </div>`
-                : `<div class="relative group">
-                    <div class="w-24 h-24 bg-blue-500 rounded-full flex items-center justify-center text-white text-3xl font-bold mb-2 border-4 border-white shadow-lg">
-                        ${(currentPerson['Имя'] || '?').charAt(0)}${(currentPerson['Фамилия'] || '').charAt(0)}
+                : `<div class="relative inline-block">
+                    <div class="w-32 h-32 bg-gradient-to-br from-blue-400 to-blue-600 rounded-3xl flex items-center justify-center text-white text-4xl font-bold shadow-xl border-2 border-theme">
+                        ${initials}
                     </div>
-                    <button onclick="triggerPhotoUpload()" class="absolute bottom-2 right-0 bg-blue-500 text-white p-1.5 rounded-full shadow-md hover:bg-blue-600 transition-colors">
-                        <i class="fas fa-camera text-xs"></i>
+                    <button onclick="triggerPhotoUpload()" class="absolute -bottom-2 -right-2 bg-blue-500 text-white w-10 h-10 rounded-full shadow-xl border-4 border-main flex items-center justify-center hover:bg-blue-600 transition-all active:scale-90">
+                        <i class="fas fa-camera"></i>
                     </button>
                    </div>`;
 
+            let fieldsHtml = headers.map(h => {
+                let val = currentPerson[h];
+                if (!val || val.toString().trim() === '' || h === 'Имя' || h === 'Фамилия' || h === config.col_photo) return '';
+                
+                // Format date for display if it's a date column
+                if (config.date_columns.includes(h)) {
+                    val = formatDateForDisplay(val);
+                }
+
+                let icon = 'fa-info-circle';
+                if (h === 'Домашка') icon = 'fa-home';
+                if (h === 'Статус') icon = 'fa-user-tag';
+                if (h === 'Дата рождения') icon = 'fa-birthday-cake';
+                if (h === 'Телефон') icon = 'fa-phone';
+                if (h === 'Telegram') icon = 'fa-paper-plane';
+
+                return `
+                    <div class="flex items-start gap-4 p-3 bg-secondary rounded-2xl border border-theme">
+                        <div class="w-8 h-8 rounded-full bg-main shadow-sm flex items-center justify-center text-blue-500 flex-shrink-0 mt-0.5">
+                            <i class="fas ${icon} text-xs"></i>
+                        </div>
+                        <div>
+                            <div class="text-[10px] font-bold text-hint uppercase tracking-wider mb-0.5">${h}</div>
+                            <div class="text-sm font-semibold">${val}</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
             content.innerHTML = `
-                <div class="flex flex-col items-center mb-6">
+                <div class="flex flex-col items-center mb-8 py-4">
                     ${avatar}
-                    <h2 class="text-xl font-bold mt-2">${currentPerson['Имя'] || ''} ${currentPerson['Фамилия'] || ''}</h2>
+                    <h2 class="text-2xl font-black mt-4 tracking-tight">${currentPerson['Имя'] || ''} ${currentPerson['Фамилия'] || ''}</h2>
+                    <div class="text-blue-500 font-bold text-sm mt-1 px-3 py-1 bg-blue-500/10 rounded-full border border-blue-500/20">
+                        ${currentPerson['Статус'] || 'Прихожанин'}
+                    </div>
                     <input type="file" id="photo-upload" class="hidden" accept="image/*" onchange="uploadPhoto(this)">
                 </div>
-                <div class="card space-y-1">
-                    ${headers.map(h => {
-                        const val = currentPerson[h];
-                        if (!val || val.toString().trim() === '' || h === 'Имя' || h === 'Фамилия') return '';
-                        return `
-                            <div class="detail-item">
-                                <div class="detail-label">${h}</div>
-                                <div class="detail-value">${val}</div>
-                            </div>
-                        `;
-                    }).join('')}
+                
+                <div class="grid grid-cols-1 gap-3">
+                    ${fieldsHtml || '<div class="text-center text-hint py-4 italic text-sm">Нет дополнительных данных</div>'}
                 </div>
             `;
+        }
+
+        function formatDateForDisplay(val) {
+            if (!val) return '';
+            // If already DD.MM.YYYY
+            if (/^\d{2}\.\d{2}\.\d{4}$/.test(val)) return val;
+            // If YYYY-MM-DD
+            const parts = val.split('-');
+            if (parts.length === 3) {
+                return `${parts[2]}.${parts[1]}.${parts[0]}`;
+            }
+            return val;
         }
 
         function editCurrentPerson() {
@@ -394,24 +505,47 @@
             const form = document.getElementById('edit-form');
             form.innerHTML = headers.map(h => {
                 const val = person[h] || '';
+                if (h === config.col_photo) return ''; // Don't edit photo URL directly
+
                 let input = `<input type="text" id="field-${h}" class="input-field" placeholder="Введите ${h.toLowerCase()}..." value="${val}">`;
                 
                 if (config.date_columns.includes(h)) {
-                    input = `<input type="date" id="field-${h}" class="input-field" value="${formatDateForInput(val)}">`;
+                    input = `<div class="relative">
+                        <i class="fas fa-calendar absolute left-4 top-1/2 -translate-y-1/2 text-gray-300 text-sm"></i>
+                        <input type="date" id="field-${h}" class="input-field pl-11" value="${formatDateForInput(val)}">
+                    </div>`;
                 } else if (h === 'Домашка') {
-                    input = `<select id="field-${h}" class="input-field">
-                        <option value="">Не выбрано</option>
-                        ${config.homeroom_values.map(v => `<option value="${v}" ${val === v ? 'selected' : ''}>${v}</option>`).join('')}
-                    </select>`;
+                    input = `<div class="relative">
+                        <i class="fas fa-home absolute left-4 top-1/2 -translate-y-1/2 text-gray-300 text-sm"></i>
+                        <select id="field-${h}" class="input-field pl-11 appearance-none">
+                            <option value="">Не выбрано</option>
+                            ${config.homeroom_values.map(v => `<option value="${v}" ${val === v ? 'selected' : ''}>${v}</option>`).join('')}
+                        </select>
+                        <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 text-xs pointer-events-none"></i>
+                    </div>`;
                 } else if (h === 'Статус') {
-                    input = `<select id="field-${h}" class="input-field">
-                        <option value="">Не выбрано</option>
-                        ${config.status_values.map(v => `<option value="${v}" ${val === v ? 'selected' : ''}>${v}</option>`).join('')}
-                    </select>`;
+                    input = `<div class="relative">
+                        <i class="fas fa-user-tag absolute left-4 top-1/2 -translate-y-1/2 text-gray-300 text-sm"></i>
+                        <select id="field-${h}" class="input-field pl-11 appearance-none">
+                            <option value="">Не выбрано</option>
+                            ${config.status_values.map(v => `<option value="${v}" ${val === v ? 'selected' : ''}>${v}</option>`).join('')}
+                        </select>
+                        <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 text-xs pointer-events-none"></i>
+                    </div>`;
+                } else {
+                    let icon = 'fa-info-circle';
+                    if (h === 'Имя' || h === 'Фамилия') icon = 'fa-user';
+                    if (h === 'Телефон') icon = 'fa-phone';
+                    if (h === 'Telegram') icon = 'fa-paper-plane';
+                    
+                    input = `<div class="relative">
+                        <i class="fas ${icon} absolute left-4 top-1/2 -translate-y-1/2 text-gray-300 text-sm"></i>
+                        <input type="text" id="field-${h}" class="input-field pl-11" placeholder="Введите ${h.toLowerCase()}..." value="${val}">
+                    </div>`;
                 }
                 
-                return `<div>
-                    <label class="block text-xs font-bold text-gray-500 mb-1">${h}</label>
+                return `<div class="bg-main">
+                    <label class="block text-[10px] font-black text-hint uppercase tracking-widest mb-1 ml-1">${h}</label>
                     ${input}
                 </div>`;
             }).join('');
@@ -432,13 +566,11 @@
         async function savePerson() {
             const data = headers.map(h => {
                 const el = document.getElementById(`field-${h}`);
-                if (!el) return '';
+                if (!el) return (currentPerson ? currentPerson[h] : '');
                 let val = el.value;
                 if (config.date_columns.includes(h) && val) {
-                    const parts = val.split('-');
-                    if (parts.length === 3) {
-                        val = `${parts[2]}.${parts[1]}.${parts[0]}`;
-                    }
+                    // If input type="date" it's YYYY-MM-DD.
+                    // Let's ensure it's YYYY-MM-DD for the backend.
                 }
                 return val;
             });
@@ -497,11 +629,22 @@
             if (!input.files || !input.files[0]) return;
             
             const file = input.files[0];
-            const formData = new FormData();
-            formData.append('file', file);
-            
             showLoading(true);
+            
+            // Show toast or message for user
+            tg.MainButton.setText('ОБРАБОТКА ФОТО...');
+            tg.MainButton.show();
+            tg.MainButton.disable();
+            
             try {
+                // Client-side compression
+                const compressedFile = await compressImage(file);
+                
+                tg.MainButton.setText('ЗАГРУЗКА...');
+                
+                const formData = new FormData();
+                formData.append('file', compressedFile, 'photo.jpg');
+                
                 const res = await fetch(`/api/miniapp/person/${currentPerson.row_index}/photo`, {
                     method: 'POST',
                     body: formData
@@ -519,13 +662,55 @@
                     // Refresh current view
                     viewPerson(currentPerson.row_index);
                 } else {
-                    tg.showAlert('Ошибка при загрузке фото');
+                    const errorData = await res.json().catch(() => ({}));
+                    tg.showAlert(`Ошибка при загрузке фото: ${errorData.detail || res.statusText || res.status}`);
                 }
             } catch (e) {
                 console.error(e);
                 tg.showAlert('Сетевая ошибка при загрузке фото');
             }
+            tg.MainButton.hide();
             showLoading(false);
+        }
+
+        async function compressImage(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = (event) => {
+                    const img = new Image();
+                    img.src = event.target.result;
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        let width = img.width;
+                        let height = img.height;
+                        
+                        const MAX_SIZE = 1200;
+                        if (width > height) {
+                            if (width > MAX_SIZE) {
+                                height *= MAX_SIZE / width;
+                                width = MAX_SIZE;
+                            }
+                        } else {
+                            if (height > MAX_SIZE) {
+                                width *= MAX_SIZE / height;
+                                height = MAX_SIZE;
+                            }
+                        }
+                        
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+                        
+                        canvas.toBlob((blob) => {
+                            resolve(blob);
+                        }, 'image/jpeg', 0.8);
+                    };
+                    img.onerror = reject;
+                };
+                reader.onerror = reject;
+            });
         }
 
         init();

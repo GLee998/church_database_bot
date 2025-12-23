@@ -222,12 +222,8 @@ class AuthManager:
         return False
     
     async def _log_access(self, user_info: Dict[str, Any], status: str):
-        """Логирование доступа (Оптимизировано: без обновления кэша)"""
+        """Логирование доступа"""
         try:
-            # Получаем лист напрямую, минуя общий механизм кэширования клиента
-            worksheet = await sheets_client.get_worksheet("AccessLog")
-            loop = asyncio.get_event_loop()
-            
             row_data = [
                 datetime.now().isoformat(),
                 str(user_info.get('id', '')),
@@ -237,21 +233,34 @@ class AuthManager:
                 status
             ]
             
-            # Используем "Fire and forget" - отправляем задачу в фон и не ждем её завершения,
-            # чтобы не тормозить ответ пользователю.
-            # Или ждем, но без блокировки кэша всей таблицы.
-            
-            # Вариант 1: Просто append без обновления локального кэша sheets_client
-            # Мы обращаемся напрямую к gspread объекту worksheet
-            await loop.run_in_executor(None, worksheet.append_row, row_data)
-            
-            # Мы намеренно НЕ вызываем sheets_client.refresh_cache()
-            # и не трогаем self._logs_cache, пусть он будет устаревшим.
-            # Логи нужны только для админки, там они обновятся принудительно.
+            # Используем append_row из sheets_client для консистентности
+            await sheets_client.append_row(row_data, "AccessLog")
             
         except Exception as e:
-            # Ошибка логирования не должна ломать бота
-            logger.error(f"⚠️ Error logging access (non-critical): {e}")
+            logger.error(f"⚠️ Error logging access: {e}")
+
+    async def log_action(self, user_id: int, action: str, details: str = ""):
+        """Логирование действий пользователя"""
+        try:
+            # Получаем инфо о пользователе для лога
+            users = await self._get_users_data()
+            user_display = str(user_id)
+            for user in users[1:]:
+                if user and user[0] and str(user[0]) == str(user_id):
+                    user_display = f"{user[2]} (@{user[1]})" if user[1] else user[2]
+                    break
+
+            row_data = [
+                datetime.now().isoformat(),
+                str(user_id),
+                user_display,
+                action,
+                details
+            ]
+            
+            await sheets_client.append_row(row_data, "ActionLog")
+        except Exception as e:
+            logger.error(f"⚠️ Error logging action: {e}")
 
 
 # Глобальный экземпляр

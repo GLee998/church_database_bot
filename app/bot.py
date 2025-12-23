@@ -50,6 +50,8 @@ class TelegramBot:
         welcome_message = (
             html.bold("🎉 Добро пожаловать в Церковную базу данных!") + "\n\n"
             "Я помогу вам управлять информацией о прихожанах.\n\n"
+            "📍 " + html.bold("ВАЖНО:") + " Для максимально удобной работы с данными используйте кнопку " + html.bold("«🔐 Войти в базу данных»") + " ниже. "
+            "Там доступен современный интерфейс со всеми фотографиями и фильтрами.\n\n"
             "📊 Функции бота:\n"
             "• 🔍 Поиск и просмотр карточек\n"
             "• ✏️ Редактирование информации\n"
@@ -339,6 +341,7 @@ class TelegramBot:
         text = update.message.text
         
         logger.info(f"Message from {user_id}: {text}")
+        await self.auth.log_action(user_id, "MESSAGE", text)
         
         # Проверка доступа
         user_info = {
@@ -410,6 +413,7 @@ class TelegramBot:
         data = query.data
         
         logger.info(f"Callback from {user_id}/{chat_id}: {data}")
+        await self.auth.log_action(user_id, "CALLBACK", data)
         
         session = await self.sessions.get_session(chat_id)
         
@@ -446,8 +450,14 @@ class TelegramBot:
             
             if session.get('mode') == 'VIEW_ONLY':
                 await self._show_read_only_card(update, chat_id, row_index)
-            elif session.get('mode') == 'EDIT':
+            else: # Default or EDIT
                 await self._start_editing(update, chat_id, row_index)
+
+        elif data.startswith("edit_from_view_"):
+            row_index = int(data.replace("edit_from_view_", ""))
+            session['mode'] = 'EDIT'
+            await self.sessions.save_session(chat_id, session)
+            await self._start_editing(update, chat_id, row_index)
         
         elif data == "back_to_letters":
             await self._show_alphabet(update, chat_id)
@@ -477,6 +487,26 @@ class TelegramBot:
                 return
             await self._show_admin_menu(update, chat_id)
         
+        elif data.startswith("delete_person_"):
+            row_index = int(data.replace("delete_person_", ""))
+            await self._confirm_delete_person(update, chat_id, row_index)
+            
+        elif data.startswith("confirm_delete_person_"):
+            row_index = int(data.replace("confirm_delete_person_", ""))
+            await self._delete_person_action(update, chat_id, row_index)
+            
+        elif data.startswith("delete_category_"):
+            cat_name = data.replace("delete_category_", "")
+            await self._confirm_delete_category(update, chat_id, cat_name)
+            
+        elif data.startswith("confirm_delete_category_"):
+            cat_name = data.replace("confirm_delete_category_", "")
+            await self._delete_category_action(update, chat_id, cat_name)
+            
+        elif data.startswith("delete_photo_"):
+            row_index = int(data.replace("delete_photo_", ""))
+            await self._delete_photo_action(update, chat_id, row_index)
+        
         elif data == "admin_users":
             await self._show_users_list(update, chat_id)
         
@@ -489,6 +519,22 @@ class TelegramBot:
         elif data == "admin_reload":
             await self._reload_database(update, chat_id)
         
+        elif data.startswith("admin_manage_user_"):
+            user_id_to_manage = data.replace("admin_manage_user_", "")
+            await self._show_user_management(update, chat_id, user_id_to_manage)
+            
+        elif data.startswith("admin_set_role_"):
+            parts = data.replace("admin_set_role_", "").split("_")
+            if len(parts) == 2:
+                u_id, role = int(parts[0]), parts[1]
+                await self._update_user_role(update, chat_id, u_id, role)
+                
+        elif data.startswith("admin_confirm_remove_"):
+            u_id = int(data.replace("admin_confirm_remove_", ""))
+            result = await self.auth.remove_user(u_id)
+            await query.answer(result)
+            await self._show_users_list(update, chat_id)
+
         elif data == "admin_gemini_stats":
             await self._show_gemini_stats(update, chat_id)
         
@@ -521,6 +567,15 @@ class TelegramBot:
             session['current_field'] = field_name
             await self.sessions.save_session(chat_id, session)
             
+            if field_name == settings.col_photo:
+                await query.edit_message_text(
+                    f"📸 Отправьте {html.bold('фотографию')} для этого контакта.\n"
+                    "Вы можете сделать снимок сейчас или выбрать из галереи.",
+                    parse_mode='HTML',
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="back_to_builder_menu")]])
+                )
+                return
+
             current_value = session['draft'].get(field_name, "")
             if field_name in settings.date_columns and current_value:
                 current_value = self.sheets.format_date(current_value)
@@ -626,15 +681,20 @@ class TelegramBot:
         session['state'] = 'IDLE'
         await self.sessions.save_session(chat_id, session)
         
+        message = (
+            html.bold("⛪ Церковная база данных") + "\n\n"
+            "👇 Нажмите кнопку ниже для входа в полнофункциональную базу данных:"
+        )
+        
         if hasattr(update, 'callback_query') and update.callback_query:
             await update.callback_query.edit_message_text(
-                html.bold("⛪ Церковная база данных") + "\nВыберите действие:",
+                message,
                 reply_markup=reply_markup,
                 parse_mode='HTML'
             )
         else:
             await update.message.reply_text(
-                html.bold("⛪ Церковная база данных") + "\nВыберите действие:",
+                message,
                 reply_markup=reply_markup,
                 parse_mode='HTML'
             )
@@ -828,14 +888,22 @@ class TelegramBot:
             headers = data[0]
             row_data = data[row_index - 1]
             
-            message = html.bold("📋 Информация о прихожанине:") + "\n\n"
-            has_data = False
+            message = html.bold("📋 Просмотр карточки") + "\n\n"
             
+            # Photo first
+            photo_idx = headers.index(settings.col_photo) if settings.col_photo in headers else -1
+            if photo_idx != -1 and photo_idx < len(row_data) and row_data[photo_idx]:
+                # We can't send photos via edit_message_text,
+                # but we can show the link or better, use sendPhoto if possible.
+                # For simplicity in this bot architecture, we'll keep it as text for now
+                # or the user might want to see it in Mini App.
+                pass
+
+            has_data = False
             for i, header in enumerate(headers):
                 if i < len(row_data):
                     value = row_data[i]
-                    if value and str(value).strip():
-                        # Форматируем дату если нужно
+                    if value and str(value).strip() and header != settings.col_photo:
                         if header in settings.date_columns:
                             value = self.sheets.format_date(value)
                         
@@ -846,9 +914,16 @@ class TelegramBot:
                 message += "(Нет данных)"
             
             keyboard = [
+                [InlineKeyboardButton("✏️ Редактировать", callback_data=f"person_{row_index}")],
+                [InlineKeyboardButton("🗑️ Удалить карточку", callback_data=f"delete_person_{row_index}")],
                 [InlineKeyboardButton("⬅️ К списку имен", callback_data="back_to_people")],
                 [InlineKeyboardButton("🏠 В главное меню", callback_data="back_to_main")]
             ]
+            
+            # If we are in VIEW_ONLY mode, clicking person_XXX usually goes to view.
+            # But we need to switch mode to EDIT to allow editing.
+            # Let's change the callback data to explicitly handle edit from view.
+            keyboard[0][0] = InlineKeyboardButton("✏️ Редактировать", callback_data=f"edit_from_view_{row_index}")
             
             reply_markup = InlineKeyboardMarkup(keyboard)
             
@@ -1035,9 +1110,22 @@ class TelegramBot:
                     value = session['draft'][header]
                     if header in settings.date_columns:
                         value = self.sheets.format_date(value)
-                    label = f"✅ {header}: {html.escape(str(value))}"
+                    
+                    if header == settings.col_photo:
+                        label = f"📸 {header}: (Загружено)"
+                    else:
+                        label = f"✅ {header}: {html.escape(str(value))}"
                 
-                keyboard.append([InlineKeyboardButton(label, callback_data=f"edit_field_{header}")])
+                row_btns = [InlineKeyboardButton(label, callback_data=f"edit_field_{header}")]
+                
+                # Добавляем кнопку удаления для кастомных полей (не системных)
+                system_fields = [settings.col_first_name, settings.col_last_name, settings.col_birth_date, settings.col_homeroom, settings.col_status]
+                if header not in system_fields:
+                    row_btns.append(InlineKeyboardButton("🗑️", callback_data=f"delete_category_{header}"))
+                elif header == settings.col_photo and header in session['draft']:
+                    row_btns.append(InlineKeyboardButton("🗑️", callback_data=f"delete_photo_{session.get('editing_row', 0)}"))
+
+                keyboard.append(row_btns)
             
             keyboard.append([InlineKeyboardButton("➕ Доб. категорию", callback_data="add_category")])
             keyboard.append([
@@ -1094,10 +1182,12 @@ class TelegramBot:
             if session['mode'] == 'CREATE':
                 await self.sheets.append_row(row_data)
                 message = "✅ Карточка успешно создана!"
+                await self.auth.log_action(chat_id, "CREATE_CARD", str(row_data))
             else:
                 row_index = session['editing_row']
                 await self.sheets.update_row(row_index, row_data)
                 message = "✅ Данные обновлены!"
+                await self.auth.log_action(chat_id, "UPDATE_CARD", f"Row {row_index}: {str(row_data)}")
             
             await self.sessions.clear_session(chat_id)
             
@@ -1272,12 +1362,18 @@ class TelegramBot:
     async def _show_admin_menu(self, update: Update, chat_id: int):
         """Показать админ-меню"""
         keyboard = [
-            [InlineKeyboardButton("👥 Список пользователей", callback_data="admin_users")],
-            [InlineKeyboardButton("📊 Статистика", callback_data="admin_stats")],
-            [InlineKeyboardButton("📋 Логи доступа", callback_data="admin_logs")],
-            [InlineKeyboardButton("🤖 Статистика AI", callback_data="admin_gemini_stats")],
-            [InlineKeyboardButton("➕ Добавить пользователя", callback_data="admin_add_user")],
-            [InlineKeyboardButton("➖ Удалить пользователя", callback_data="admin_remove_user")],
+            [
+                InlineKeyboardButton("👥 Пользователи", callback_data="admin_users"),
+                InlineKeyboardButton("📊 Статистика", callback_data="admin_stats")
+            ],
+            [
+                InlineKeyboardButton("📋 Логи доступа", callback_data="admin_logs"),
+                InlineKeyboardButton("🤖 Анализ AI", callback_data="admin_gemini_stats")
+            ],
+            [
+                InlineKeyboardButton("➕ Добавить", callback_data="admin_add_user"),
+                InlineKeyboardButton("➖ Удалить", callback_data="admin_remove_user")
+            ],
             [InlineKeyboardButton("🔄 Обновить базу", callback_data="admin_reload")],
             [InlineKeyboardButton("🏠 Главное меню", callback_data="back_to_main")]
         ]
@@ -1305,18 +1401,27 @@ class TelegramBot:
     async def _show_users_list(self, update: Update, chat_id: int):
         """Показать список пользователей"""
         try:
-            users_list = await self.auth.get_users_list()
+            users_data = await self.auth._get_users_data()
             
-            keyboard = [
-                [InlineKeyboardButton("⬅️ Назад в админ-панель", callback_data="back_to_admin")],
-                [InlineKeyboardButton("🏠 Главное меню", callback_data="back_to_main")]
-            ]
+            keyboard = []
+            if len(users_data) > 1:
+                for user in users_data[1:]:
+                    if len(user) >= 4:
+                        u_id = user[0]
+                        u_name = user[2] or user[1] or u_id
+                        role = "👑" if user[3] == "admin" else "👤"
+                        keyboard.append([InlineKeyboardButton(f"{role} {u_name} ({u_id})", callback_data=f"admin_manage_user_{u_id}")])
+            
+            keyboard.append([InlineKeyboardButton("➕ Добавить нового", callback_data="admin_add_user")])
+            keyboard.append([InlineKeyboardButton("⬅️ Назад в админ-панель", callback_data="back_to_admin")])
             
             reply_markup = InlineKeyboardMarkup(keyboard)
             
+            message = html.bold("👥 Управление пользователями") + "\nВыберите пользователя для управления:"
+            
             if hasattr(update, 'callback_query') and update.callback_query:
                 await update.callback_query.edit_message_text(
-                    users_list,
+                    message,
                     reply_markup=reply_markup,
                     parse_mode='HTML'
                 )
@@ -1554,7 +1659,132 @@ class TelegramBot:
                 [InlineKeyboardButton("⬅️ Назад", callback_data="back_to_admin")]
             ])
         )
-    
+
+    async def _confirm_delete_person(self, update: Update, chat_id: int, row_index: int):
+        """Подтверждение удаления человека"""
+        keyboard = [
+            [InlineKeyboardButton("✅ ДА, УДАЛИТЬ", callback_data=f"confirm_delete_person_{row_index}")],
+            [InlineKeyboardButton("❌ ОТМЕНА", callback_data=f"person_{row_index}")]
+        ]
+        await update.callback_query.edit_message_text(
+            html.bold("⚠️ ПОДТВЕРЖДЕНИЕ УДАЛЕНИЯ") + "\n\nВы уверены, что хотите полностью удалить эту карточку?",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='HTML'
+        )
+
+    async def _delete_person_action(self, update: Update, chat_id: int, row_index: int):
+        """Действие по удалению человека"""
+        try:
+            await self.sheets.delete_row(row_index)
+            await self.auth.log_action(chat_id, "DELETE_PERSON", f"Row {row_index} deleted")
+            await update.callback_query.answer("✅ Карточка удалена")
+            await self._show_alphabet(update, chat_id)
+        except Exception as e:
+            await update.callback_query.edit_message_text(f"❌ Ошибка: {e}")
+
+    async def _confirm_delete_category(self, update: Update, chat_id: int, cat_name: str):
+        """Подтверждение удаления категории"""
+        keyboard = [
+            [InlineKeyboardButton("✅ ДА, УДАЛИТЬ КОЛОНКУ", callback_data=f"confirm_delete_category_{cat_name}")],
+            [InlineKeyboardButton("❌ ОТМЕНА", callback_data="back_to_builder_menu")]
+        ]
+        await update.callback_query.edit_message_text(
+            html.bold("⚠️ ПОДТВЕРЖДЕНИЕ УДАЛЕНИЯ КАТЕГОРИИ") + f"\n\nВы уверены, что хотите удалить колонку '{cat_name}' для ВСЕХ записей?",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='HTML'
+        )
+
+    async def _delete_category_action(self, update: Update, chat_id: int, cat_name: str):
+        """Действие по удалению категории"""
+        try:
+            await self.sheets.delete_column(cat_name)
+            await self.auth.log_action(chat_id, "DELETE_CATEGORY", f"Column '{cat_name}' deleted")
+            await update.callback_query.answer(f"✅ Категория '{cat_name}' удалена")
+            
+            session = await self.sessions.get_session(chat_id)
+            if cat_name in session.get('draft', {}):
+                del session['draft'][cat_name]
+                await self.sessions.save_session(chat_id, session)
+                
+            await self._show_builder_menu(update, chat_id, session)
+        except Exception as e:
+            await update.callback_query.edit_message_text(f"❌ Ошибка: {e}")
+
+    async def _delete_photo_action(self, update: Update, chat_id: int, row_index: int):
+        """Удаление только фотографии"""
+        session = await self.sessions.get_session(chat_id)
+        if settings.col_photo in session.get('draft', {}):
+            del session['draft'][settings.col_photo]
+            await self.sessions.save_session(chat_id, session)
+            await update.callback_query.answer("✅ Фото удалено из черновика")
+            
+            # Если мы в режиме редактирования, нужно обновить и в таблице при сохранении,
+            # или сразу если пользователь ожидает мгновенного удаления.
+            # Для консистентности с ботом, удаляем из черновика, сохранение произойдет по кнопке "СОХРАНИТЬ"
+            await self._show_builder_menu(update, chat_id, session)
+
+    async def _show_user_management(self, update: Update, chat_id: int, user_id_to_manage: str):
+        """Показать меню управления конкретным пользователем"""
+        users_data = await self.auth._get_users_data()
+        user_info = None
+        for u in users_data[1:]:
+            if u[0] == user_id_to_manage:
+                user_info = u
+                break
+        
+        if not user_info:
+            await update.callback_query.edit_message_text("❌ Пользователь не найден.")
+            return
+
+        u_id = user_info[0]
+        u_username = user_info[1]
+        u_name = user_info[2]
+        u_role = user_info[3]
+
+        message = (
+            html.bold("👤 Управление пользователем") + "\n\n"
+            f"ID: {html.code(u_id)}\n"
+            f"Имя: {html.escape(u_name)}\n"
+            f"Username: @{html.escape(u_username) if u_username else 'нет'}\n"
+            f"Текущая роль: {html.bold(u_role)}\n"
+        )
+
+        keyboard = []
+        if u_role == "user":
+            keyboard.append([InlineKeyboardButton("👑 Сделать админом", callback_data=f"admin_set_role_{u_id}_admin")])
+        else:
+            keyboard.append([InlineKeyboardButton("👤 Сделать пользователем", callback_data=f"admin_set_role_{u_id}_user")])
+        
+        keyboard.append([InlineKeyboardButton("❌ Удалить доступ", callback_data=f"admin_confirm_remove_{u_id}")])
+        keyboard.append([InlineKeyboardButton("⬅️ Назад к списку", callback_data="admin_users")])
+
+        await update.callback_query.edit_message_text(
+            message,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='HTML'
+        )
+
+    async def _update_user_role(self, update: Update, chat_id: int, user_id: int, new_role: str):
+        """Обновить роль пользователя"""
+        try:
+            worksheet = await self.sheets.get_worksheet("Users")
+            users = await self.auth._get_users_data()
+            
+            for i, user in enumerate(users):
+                if i > 0 and user[0] and int(user[0]) == user_id:
+                    # В таблице Users роль в 4-й колонке (D)
+                    loop = asyncio.get_event_loop()
+                    await loop.run_in_executor(None, lambda: worksheet.update_cell(i + 1, 4, new_role))
+                    break
+            
+            self.auth._users_cache = None
+            await self.auth._get_users_data()
+            await update.callback_query.answer(f"✅ Роль изменена на {new_role}")
+            await self._show_user_management(update, chat_id, str(user_id))
+        except Exception as e:
+            logger.error(f"Error updating role: {e}")
+            await update.callback_query.answer(f"❌ Ошибка: {e}")
+
     # ========== МЕТОДЫ "ОСТАЛЬНОЕ" ==========
  
     async def _get_month_name(self, month_number: int) -> str:
@@ -1994,7 +2224,7 @@ class TelegramBot:
                 # Проверяем, является ли текст названием поля
                 headers = await self.sheets.get_headers()
                 for header in headers:
-                    if text.startswith(header) or text.startswith(f"✅ {header}"):
+                    if text.startswith(header) or text.startswith(f"✅ {header}") or text.startswith(f"📸 {header}"):
                         session['step'] = 'WAITING_VALUE'
                         session['current_field'] = header
                         await self.sessions.save_session(chat_id, session)
@@ -2036,6 +2266,41 @@ class TelegramBot:
                 session['step'] = 'MENU'
                 await self.sessions.save_session(chat_id, session)
                 await self._show_builder_menu(update, chat_id, session)
+
+    async def handle_photo(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработчик фотографий"""
+        chat_id = update.effective_chat.id
+        session = await self.sessions.get_session(chat_id)
+        
+        if session.get('state') == 'BUILDER_MODE' and session.get('current_field') == settings.col_photo:
+            # Получаем самое качественное фото
+            photo = update.message.photo[-1]
+            file = await context.bot.get_file(photo.file_id)
+            
+            # Создаем имя файла
+            import uuid
+            import os
+            ext = ".jpg"
+            filename = f"{uuid.uuid4()}{ext}"
+            photo_dir = "static/photos"
+            os.makedirs(photo_dir, exist_ok=True)
+            filepath = os.path.join(photo_dir, filename)
+            
+            # Скачиваем файл
+            await file.download_to_drive(filepath)
+            
+            photo_url = f"/photos/{filename}"
+            
+            # Обновляем черновик
+            session['draft'][settings.col_photo] = photo_url
+            session['step'] = 'MENU'
+            session['current_field'] = None
+            await self.sessions.save_session(chat_id, session)
+            
+            await update.message.reply_text("✅ Фотография загружена!")
+            await self._show_builder_menu(update, chat_id, session)
+        else:
+            await update.message.reply_text("Пожалуйста, используйте меню для редактирования карточек.")
 
 
 # Глобальный экземпляр бота
