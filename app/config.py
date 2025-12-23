@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     col_birth_date: str = "Дата рождения"
     col_homeroom: str = "Домашка"
     col_status: str = "Статус"
+    col_photo: str = "Фото"
     
     # Дата колонки
     date_columns: List[str] = ["Дата рождения", "Дата", "Дата регистрации"]

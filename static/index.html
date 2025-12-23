@@ -101,7 +101,7 @@
         }
     </style>
 </head>
-<body class="p-4">
+<body class="p-4 pb-20">
     <div id="app">
         <header class="flex justify-between items-center mb-4">
             <h1 class="text-xl font-bold">Church Database</h1>
@@ -202,20 +202,30 @@
 
         function renderPeople() {
             const container = document.getElementById('people-list');
-            container.innerHTML = allPeople.map(p => `
-                <div class="card flex justify-between items-center" onclick="viewPerson(${p.row_index})">
-                    <div>
-                        <div class="font-bold text-lg">${p['Имя'] || ''} ${p['Фамилия'] || ''}</div>
-                        <div class="text-sm opacity-70 flex items-center gap-2 mt-1">
-                            <i class="fas fa-home text-blue-400"></i> ${p['Домашка'] || 'Нет домашки'}
+            container.innerHTML = allPeople.map(p => {
+                const photoUrl = p[config.col_photo];
+                const avatar = photoUrl
+                    ? `<img src="${photoUrl}" class="w-12 h-12 rounded-full object-cover mr-4 shadow-sm">`
+                    : `<div class="w-12 h-12 bg-blue-500 rounded-full flex items-center justify-center text-white text-sm font-bold mr-4 shadow-sm">
+                        ${(p['Имя'] || '?').charAt(0)}${(p['Фамилия'] || '').charAt(0)}
+                       </div>`;
+                
+                return `
+                <div class="card flex items-center" onclick="viewPerson(${p.row_index})">
+                    ${avatar}
+                    <div class="flex-1">
+                        <div class="font-bold text-lg leading-tight">${p['Имя'] || ''} ${p['Фамилия'] || ''}</div>
+                        <div class="text-sm opacity-70 flex items-center gap-1 mt-1">
+                            <i class="fas fa-home text-blue-400 text-xs"></i> ${p['Домашка'] || 'Нет домашки'}
                         </div>
-                        <div class="text-xs opacity-50 mt-1">
+                        <div class="text-xs opacity-60 mt-1">
                             <span class="px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100">${p['Статус'] || 'Без статуса'}</span>
                         </div>
                     </div>
-                    <i class="fas fa-chevron-right opacity-30"></i>
+                    <i class="fas fa-chevron-right opacity-20"></i>
                 </div>
-            `).join('');
+                `;
+            }).join('');
         }
 
         function showSearch() {
@@ -325,12 +335,28 @@
             container.classList.remove('hidden');
             
             const content = document.getElementById('details-content');
-            content.innerHTML = `
-                <div class="flex flex-col items-center mb-6">
-                    <div class="w-20 h-20 bg-blue-500 rounded-full flex items-center justify-center text-white text-3xl font-bold mb-2">
+            const photoUrl = currentPerson[config.col_photo];
+            const avatar = photoUrl
+                ? `<div class="relative group">
+                    <img src="${photoUrl}" class="w-24 h-24 rounded-full object-cover mb-2 border-4 border-white shadow-lg">
+                    <button onclick="triggerPhotoUpload()" class="absolute bottom-2 right-0 bg-blue-500 text-white p-1.5 rounded-full shadow-md hover:bg-blue-600 transition-colors">
+                        <i class="fas fa-camera text-xs"></i>
+                    </button>
+                   </div>`
+                : `<div class="relative group">
+                    <div class="w-24 h-24 bg-blue-500 rounded-full flex items-center justify-center text-white text-3xl font-bold mb-2 border-4 border-white shadow-lg">
                         ${(currentPerson['Имя'] || '?').charAt(0)}${(currentPerson['Фамилия'] || '').charAt(0)}
                     </div>
-                    <h2 class="text-xl font-bold">${currentPerson['Имя'] || ''} ${currentPerson['Фамилия'] || ''}</h2>
+                    <button onclick="triggerPhotoUpload()" class="absolute bottom-2 right-0 bg-blue-500 text-white p-1.5 rounded-full shadow-md hover:bg-blue-600 transition-colors">
+                        <i class="fas fa-camera text-xs"></i>
+                    </button>
+                   </div>`;
+
+            content.innerHTML = `
+                <div class="flex flex-col items-center mb-6">
+                    ${avatar}
+                    <h2 class="text-xl font-bold mt-2">${currentPerson['Имя'] || ''} ${currentPerson['Фамилия'] || ''}</h2>
+                    <input type="file" id="photo-upload" class="hidden" accept="image/*" onchange="uploadPhoto(this)">
                 </div>
                 <div class="card space-y-1">
                     ${headers.map(h => {
@@ -461,6 +487,45 @@
 
         function showLoading(show) {
             document.getElementById('content-loading').classList.toggle('hidden', !show);
+        }
+
+        function triggerPhotoUpload() {
+            document.getElementById('photo-upload').click();
+        }
+
+        async function uploadPhoto(input) {
+            if (!input.files || !input.files[0]) return;
+            
+            const file = input.files[0];
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            showLoading(true);
+            try {
+                const res = await fetch(`/api/miniapp/person/${currentPerson.row_index}/photo`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (res.ok) {
+                    const data = await res.json();
+                    tg.HapticFeedback.notificationOccurred('success');
+                    // Update current person locally
+                    currentPerson[config.col_photo] = data.photo_url;
+                    // Find and update in allPeople list too
+                    const personInList = allPeople.find(p => p.row_index === currentPerson.row_index);
+                    if (personInList) personInList[config.col_photo] = data.photo_url;
+                    
+                    // Refresh current view
+                    viewPerson(currentPerson.row_index);
+                } else {
+                    tg.showAlert('Ошибка при загрузке фото');
+                }
+            } catch (e) {
+                console.error(e);
+                tg.showAlert('Сетевая ошибка при загрузке фото');
+            }
+            showLoading(false);
         }
 
         init();

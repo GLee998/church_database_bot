@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
 from typing import List, Dict, Any, Optional
 from app.sheets import sheets_client
 from app.gemini import gemini
@@ -75,5 +75,49 @@ async def get_config():
     return {
         "homeroom_values": settings.homeroom_values,
         "status_values": settings.status_values,
-        "date_columns": settings.date_columns
+        "date_columns": settings.date_columns,
+        "col_photo": settings.col_photo
     }
+
+@router.post("/person/{row_index}/photo")
+async def upload_photo(row_index: int, file: UploadFile = File(...)):
+    import os
+    import uuid
+    
+    # Создаем директорию для фото если нет
+    photo_dir = "static/photos"
+    os.makedirs(photo_dir, exist_ok=True)
+    
+    # Генерируем имя файла
+    ext = os.path.splitext(file.filename)[1]
+    filename = f"{uuid.uuid4()}{ext}"
+    filepath = os.path.join(photo_dir, filename)
+    
+    # Сохраняем файл
+    with open(filepath, "wb") as buffer:
+        buffer.write(await file.read())
+    
+    photo_url = f"/photos/{filename}"
+    
+    # Обновляем ячейку в таблице
+    headers = await sheets_client.get_headers()
+    try:
+        photo_col_idx = headers.index(settings.col_photo)
+    except ValueError:
+        # Добавляем колонку если нет
+        await sheets_client.add_column(settings.col_photo)
+        headers = await sheets_client.get_headers()
+        photo_col_idx = headers.index(settings.col_photo)
+    
+    # Получаем текущую строку
+    data = await sheets_client.get_all_data()
+    row_data = list(data[row_index - 1])
+    
+    # Расширяем строку если она короче чем индекс колонки фото
+    while len(row_data) <= photo_col_idx:
+        row_data.append("")
+    
+    row_data[photo_col_idx] = photo_url
+    await sheets_client.update_row(row_index, row_data)
+    
+    return {"photo_url": photo_url}

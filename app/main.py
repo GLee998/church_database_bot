@@ -120,6 +120,7 @@ app.add_middleware(
 
 # Статические файлы Mini App
 app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/photos", StaticFiles(directory="static/photos"), name="photos")
 
 # Роутер API
 app.include_router(api_router)

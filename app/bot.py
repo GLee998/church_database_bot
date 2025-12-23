@@ -422,6 +422,9 @@ class TelegramBot:
             await self.sessions.clear_session(chat_id)
             await self._send_main_menu(update, chat_id)
         
+        elif data == "bot_menu":
+            await self._show_bot_menu(update, chat_id)
+
         elif data == "ask_gemini":
             await self._start_gemini_question(update, chat_id)
         
@@ -568,6 +571,34 @@ class TelegramBot:
             await query.edit_message_text("Неизвестная команда")
     
     # ========== ОСНОВНЫЕ МЕТОДЫ БОТА ==========
+
+    async def _show_bot_menu(self, update: Update, chat_id: int):
+        """Показать дополнительное меню бота"""
+        keyboard = [
+            [InlineKeyboardButton("🔍 Найти / Просмотреть", callback_data="view")],
+            [InlineKeyboardButton("✏️ Редактировать карточку", callback_data="edit")],
+            [InlineKeyboardButton("➕ Создать карточку", callback_data="create")],
+            [InlineKeyboardButton("🤖 Задать вопрос AI", callback_data="ask_gemini")],
+            [InlineKeyboardButton("⭐ Остальное", callback_data="other_menu")],
+            [InlineKeyboardButton("⬅️ Назад", callback_data="back_to_main")]
+        ]
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        message = html.bold("🤖 Меню бота") + "\nВыберите действие:"
+        
+        if hasattr(update, 'callback_query') and update.callback_query:
+            await update.callback_query.edit_message_text(
+                message,
+                reply_markup=reply_markup,
+                parse_mode='HTML'
+            )
+        else:
+            await update.message.reply_text(
+                message,
+                reply_markup=reply_markup,
+                parse_mode='HTML'
+            )
     
     async def _send_main_menu(self, update: Update, chat_id: int, user_id: Optional[int] = None):
         """Отправка главного меню"""
@@ -581,15 +612,9 @@ class TelegramBot:
         
         # Добавляем кнопку Mini App, если URL настроен
         if settings.webapp_url:
-            keyboard.append([InlineKeyboardButton("📱 Открыть Mini App", web_app=WebAppInfo(url=settings.webapp_url))])
+            keyboard.append([InlineKeyboardButton("🔐 Войти в базу данных", web_app=WebAppInfo(url=settings.webapp_url))])
             
-        keyboard.extend([
-            [InlineKeyboardButton("🔍 Найти / Просмотреть", callback_data="view")],
-            [InlineKeyboardButton("✏️ Редактировать карточку", callback_data="edit")],
-            [InlineKeyboardButton("➕ Создать карточку", callback_data="create")],
-            [InlineKeyboardButton("🤖 Задать вопрос AI", callback_data="ask_gemini")],
-            [InlineKeyboardButton("⭐ Остальное", callback_data="other_menu")]
-        ])
+        keyboard.append([InlineKeyboardButton("🤖 Меню бота", callback_data="bot_menu")])
         
         # Добавляем админ-панель для администраторов
         if await self.auth.is_admin(user_id):
