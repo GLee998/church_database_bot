@@ -83,6 +83,8 @@ async def get_config():
 
 @router.post("/person/{row_index}/photo")
 async def upload_photo(row_index: int, file: UploadFile = File(...)):
+    import os
+    import uuid
     # Создаем директорию для фото если нет
     photo_dir = "static/photos"
     os.makedirs(photo_dir, exist_ok=True)
